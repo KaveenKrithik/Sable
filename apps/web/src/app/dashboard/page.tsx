@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Activity, Server, LayoutList, AlertTriangle } from "lucide-react";
-import * as motion from "framer-motion/client";
+import { motion } from "framer-motion";
 
 import { ThroughputChart } from "@/components/dashboard/throughput-chart";
 

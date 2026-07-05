@@ -1,6 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { LayoutDashboard, ListTree, Settings, Activity, ListOrdered, ServerCog } from "lucide-react";
-import * as motion from "framer-motion/client";
+import { motion } from "framer-motion";
 
 export function Sidebar() {
   return (
