@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum JobStatus {
+  QUEUED
+  SCHEDULED
+  CLAIMED
+  RUNNING
+  COMPLETED
+  FAILED
+  RETRY
+  DEAD_LETTER
+}
+
+enum ExecutionStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  memberships  OrganizationMember[]
+}
+
+model Organization {
+  id        String               @id @default(uuid())
+  name      String
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  members   OrganizationMember[]
+  projects  Project[]
+}
+
+model OrganizationMember {
+  id             String       @id @default(uuid())
+  userId         String
+  organizationId String
+  role           Role         @default(MEMBER)
+  createdAt      DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model Project {
+  id             String       @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  queues         Queue[]
+}
+
+model Queue {
+  id               String   @id @default(uuid())
+  projectId        String
+  name             String
+  description      String?
+  concurrencyLimit Int      @default(10)
+  isPaused         Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  jobs             Job[]
+}
+
+model Job {
+  id           String         @id @default(uuid())
+  queueId      String
+  name         String
+  payload      Json           @default("{}")
+  status       JobStatus      @default(QUEUED)
+  priority     Int            @default(0) // Higher is more important
+  runAt        DateTime       @default(now()) // For delayed/scheduled jobs
+  maxRetries   Int            @default(3)
+  retryCount   Int            @default(0)
+  retryDelay   Int            @default(1000) // Delay in ms for fixed backoff
+  backoffType  String         @default("FIXED") // FIXED, EXPONENTIAL
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  queue        Queue          @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  executions   JobExecution[]
+
+  @@index([status, runAt]) // Index for efficiently finding jobs to run
+  @@index([queueId, status]) // Index for dashboard metrics
+}
+
+model JobExecution {
+  id          String          @id @default(uuid())
+  jobId       String
+  workerId    String
+  status      ExecutionStatus
+  logs        Json            @default("[]")
+  error       String?
+  startedAt   DateTime        @default(now())
+  completedAt DateTime?
+  job         Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  worker      Worker          @relation(fields: [workerId], references: [id], onDelete: SetNull)
+
+  @@index([jobId])
+  @@index([workerId])
+}
+
+model Worker {
+  id            String         @id @default(uuid())
+  name          String
+  status        String         @default("ONLINE") // ONLINE, OFFLINE
+  lastHeartbeat DateTime       @default(now())
+  supportedQs   String[]       // Array of queue IDs this worker supports (or '*' for all)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  executions    JobExecution[]
+}
